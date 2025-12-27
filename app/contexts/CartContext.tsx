@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+'use client';
+
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { CartItem } from '@/types/product';
 
 interface CartContextType {
@@ -9,6 +11,7 @@ interface CartContextType {
   clearCart: () => void;
   totalItems: number;
   getItemQty: (productId: string) => number;
+  isLoaded: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -16,11 +19,10 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 const CART_STORAGE_KEY = 'shop-cart';
 
 function loadCart(): CartItem[] {
+  if (typeof window === 'undefined') return [];
   try {
-    const stored = localStorage.getItem(CART_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
+    const stored = window.localStorage.getItem(CART_STORAGE_KEY);
+    if (stored) return JSON.parse(stored) as CartItem[];
   } catch (e) {
     console.error('Failed to load cart from localStorage', e);
   }
@@ -28,8 +30,9 @@ function loadCart(): CartItem[] {
 }
 
 function saveCart(items: CartItem[]): void {
+  if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+    window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
   } catch (e) {
     console.error('Failed to save cart to localStorage', e);
   }
@@ -39,17 +42,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load cart from localStorage on mount
   useEffect(() => {
     setItems(loadCart());
     setIsLoaded(true);
   }, []);
 
-  // Save cart to localStorage whenever it changes
   useEffect(() => {
-    if (isLoaded) {
-      saveCart(items);
-    }
+    if (!isLoaded) return;
+    saveCart(items);
   }, [items, isLoaded]);
 
   const addItem = useCallback((productId: string, qty: number = 1) => {
@@ -57,9 +57,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const existing = prev.find((item) => item.productId === productId);
       if (existing) {
         return prev.map((item) =>
-          item.productId === productId
-            ? { ...item, qty: item.qty + qty }
-            : item
+          item.productId === productId ? { ...item, qty: item.qty + qty } : item
         );
       }
       return [...prev, { productId, qty }];
@@ -70,50 +68,47 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.filter((item) => item.productId !== productId));
   }, []);
 
-  const setQty = useCallback((productId: string, qty: number) => {
-    if (qty <= 0) {
-      removeItem(productId);
-      return;
-    }
-    setItems((prev) =>
-      prev.map((item) =>
-        item.productId === productId ? { ...item, qty } : item
-      )
-    );
-  }, [removeItem]);
-
-  const clearCart = useCallback(() => {
-    setItems([]);
-  }, []);
-
-  const totalItems = items.reduce((sum, item) => sum + item.qty, 0);
-
-  const getItemQty = useCallback((productId: string) => {
-    const item = items.find((i) => i.productId === productId);
-    return item?.qty ?? 0;
-  }, [items]);
-
-  return (
-    <CartContext.Provider
-      value={{
-        items,
-        addItem,
-        removeItem,
-        setQty,
-        clearCart,
-        totalItems,
-        getItemQty,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
+  const setQty = useCallback(
+    (productId: string, qty: number) => {
+      if (qty <= 0) {
+        removeItem(productId);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((item) => (item.productId === productId ? { ...item, qty } : item))
+      );
+    },
+    [removeItem]
   );
+
+  const clearCart = useCallback(() => setItems([]), []);
+
+  const totalItems = useMemo(() => items.reduce((sum, item) => sum + item.qty, 0), [items]);
+
+  const getItemQty = useCallback(
+    (productId: string) => items.find((i) => i.productId === productId)?.qty ?? 0,
+    [items]
+  );
+
+  const value = useMemo(
+    () => ({
+      items,
+      addItem,
+      removeItem,
+      setQty,
+      clearCart,
+      totalItems,
+      getItemQty,
+      isLoaded,
+    }),
+    [items, addItem, removeItem, setQty, clearCart, totalItems, getItemQty, isLoaded]
+  );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart() {
-  const context = useContext(CartContext);
-  if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
-  return context;
+  const ctx = useContext(CartContext);
+  if (!ctx) throw new Error('useCart must be used within a CartProvider');
+  return ctx;
 }

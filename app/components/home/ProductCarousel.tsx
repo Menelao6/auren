@@ -1,9 +1,8 @@
-
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/components/product/ProductCard';
-import { Product } from '@/types/product';
+import type { Product } from '@/types/product';
 import { cn } from '@/lib/utils';
 
 interface ProductCarouselProps {
@@ -13,7 +12,7 @@ interface ProductCarouselProps {
   className?: string;
 }
 
-export default function ProductCarousel({ title, subtitle, products, className }: ProductCarouselProps) {
+export function ProductCarousel({ title, subtitle, products, className }: ProductCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
